@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import os
+
+INR_TO_USD = 0.012  # 1 INR ≈ $0.012
+INR_TO_UGX = 45.0   # 1 INR ≈ 45 UGX
 
 # Load model and expected features
 model, feature_names = pickle.load(open("car_model.pkl", "rb"))
@@ -32,8 +36,28 @@ with st.form("form"):
     submitted = st.form_submit_button("🔍 Predict")
     reset = st.form_submit_button("🔄 Reset", on_click=reset_inputs)
 
+    if submitted:
+        input_dict = {
+            'Present_Price': present_price,
+            'Kms_Driven': kms_driven,
+            'Owner': owner,
+            'Year': year,
+            'Fuel_Diesel': 1 if fuel_type == 'Diesel' else 0,
+            'Fuel_Petrol': 1 if fuel_type == 'Petrol' else 0,
+            'Seller_Type_Individual': 1 if seller_type == 'Individual' else 0,
+            'Transmission_Manual': 1 if transmission == 'Manual' else 0
+        }
+
+        input_df = pd.DataFrame([input_dict])
+        input_df = input_df.reindex(columns=feature_names)
+
+        st.write("🧪 Input DataFrame (for debugging):", input_df)  # Optional debug line
+
+        prediction = model.predict(input_df)[0]
+        st.success(f"💰 Estimated Selling Price: ₹{prediction:.2f} Lakhs")
+
+
 if submitted:
-    # One-hot encoding manually
     input_dict = {
         'Present_Price': present_price,
         'Kms_Driven': kms_driven,
@@ -45,10 +69,35 @@ if submitted:
         'Transmission_Manual': 1 if transmission == 'Manual' else 0
     }
 
-    # Build DataFrame from input_dict, reordering columns to match model
     input_df = pd.DataFrame([input_dict])
     input_df = input_df.reindex(columns=feature_names)
 
-    # Prediction
-    prediction = model.predict(input_df)[0]
-    st.success(f"💰 Estimated Selling Price: ₹{prediction:.2f} Lakhs")
+    # Show input for debugging
+    st.write("🧪 Input DataFrame (for debugging):", input_df)
+
+    # Predict in INR
+    prediction_inr = model.predict(input_df)[0]
+    prediction_usd = prediction_inr * 100000 * INR_TO_USD
+    prediction_ugx = prediction_inr * 100000 * INR_TO_UGX
+
+    # Show prediction results
+    st.subheader("💰 Estimated Selling Price")
+    st.write(f"- 🇮🇳 INR: ₹{prediction_inr:.2f} Lakhs")
+    st.write(f"- 🇺🇸 USD: ${prediction_usd:,.2f}")
+    st.write(f"- 🇺🇬 UGX: USh {prediction_ugx:,.0f}")
+
+    # Save input + all currency predictions to file
+    log_df = input_df.copy()
+    log_df["Predicted_INR_Lakhs"] = prediction_inr
+    log_df["Predicted_USD"] = prediction_usd
+    log_df["Predicted_UGX"] = prediction_ugx
+
+    log_df.to_csv("user_prediction_log.csv", mode='a', header=not os.path.exists("user_prediction_log.csv"), index=False)
+    st.success("✅ Prediction saved to 'user_prediction_log.csv'")
+
+
+    
+
+
+
+
